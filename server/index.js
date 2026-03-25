@@ -42,7 +42,7 @@ mongoose.connect(MONGO_URI, {
 
 const admin = require('firebase-admin');
 const app = express();
-app.use(cors());
+app.use(cors({ origin: "*" }));
 app.use(express.json({limit: '1mb'}));
 
 // middleware to verify Firebase ID token
