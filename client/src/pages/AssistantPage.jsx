@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import ChatWindow from '../components/ChatWindow';
 import EmotionalPanel from './assistant_panels/EmotionalPanel';
 import RelationshipPanel from './assistant_panels/RelationshipPanel';
@@ -18,13 +18,15 @@ const mapping = {
 
 export default function AssistantPage({ apiBase }){
   const { type } = useParams();
+  const navigate = useNavigate();
   const info = mapping[type] || { title: 'Assistant' };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto p-4 md:p-6">
       <header className="mb-6">
-        <button className="text-sm text-sky-600">&larr; Back to Menu</button>
-        <h2 className="text-2xl font-semibold">{info.title}</h2>
+        <button onClick={() => navigate('/')} className="text-sm text-cyan-700 hover:text-cyan-900">&larr; Back to Menu</button>
+        <h2 className="text-2xl md:text-3xl font-semibold mt-2 text-slate-900">{info.title}</h2>
+        <p className="text-sm text-slate-600 mt-1">Private, supportive, and practical guidance tailored to you.</p>
       </header>
 
       <main>

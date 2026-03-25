@@ -2,6 +2,7 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import AssistantPage from "./pages/AssistantPage";
+import About from "./pages/About";
 import SignInComponent from "./components/SignInComponent";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -28,6 +29,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AssistantPage apiBase={API_BASE} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/about"
+          element={
+            <ProtectedRoute>
+              <About />
             </ProtectedRoute>
           }
         />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { postChat } from "../../api";
+import ResponseText from "../../components/ResponseText";
 
 const profiles = [
   { key: "Student", title: "Student", desc: "High school or college student", icon: "🎓" },
@@ -8,7 +9,7 @@ const profiles = [
   { key: "Entrepreneur", title: "Entrepreneur", desc: "Business owner or startup founder", icon: "💡" }
 ];
 
-export default function ProductivityPanel({ apiBase }) {
+export default function ProductivityPanel({ assistantType = "productivity" }) {
   const [profile, setProfile] = useState("Student");
   const [challenges, setChallenges] = useState("");
   const [goals, setGoals] = useState("");
@@ -19,9 +20,10 @@ export default function ProductivityPanel({ apiBase }) {
     setResponse("");
     setLoading(true);
     try {
-      const res = await postChat(apiBase, "productivity", { profile, challenges, goals });
+      const input = `Profile: ${profile}\nChallenges: ${challenges || "N/A"}\nGoals: ${goals || "N/A"}`;
+      const res = await postChat(assistantType, input);
       const assistantText =
-        res.reply || res.assistantText || res.message || res.text || res.answer || JSON.stringify(res);
+        res.assistantText || res.reply || res.message || res.text || res.answer || JSON.stringify(res);
       setResponse(assistantText);
     } catch (err) {
       console.error(err);
@@ -33,7 +35,7 @@ export default function ProductivityPanel({ apiBase }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="card">
+      <div className="card border border-emerald-100 shadow-lg shadow-emerald-100/40">
         <h2 className="text-lg font-semibold mb-4">Let's Optimize Your Productivity</h2>
 
         <label className="block text-sm font-medium mb-2">What best describes you?</label>
@@ -97,7 +99,7 @@ export default function ProductivityPanel({ apiBase }) {
       </div>
 
       <div className="space-y-6">
-        <div className="card">
+        <div className="card border border-emerald-100/70">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">📈</div>
             <div>
@@ -109,7 +111,7 @@ export default function ProductivityPanel({ apiBase }) {
           </div>
         </div>
 
-        <div className="card">
+        <div className="card border border-slate-200">
           <h3 className="font-semibold mb-3">Popular Productivity Techniques</h3>
           <ul className="space-y-3 text-sm text-slate-600">
             <li className="p-3 rounded bg-slate-50 border">Pomodoro Technique — 25-minute focused sessions with 5-minute breaks</li>
@@ -118,10 +120,10 @@ export default function ProductivityPanel({ apiBase }) {
           </ul>
         </div>
 
-        <div className="card">
+        <div className="card border border-emerald-100/80">
           <h4 className="font-semibold mb-2">Plan</h4>
           {response ? (
-            <div className="text-sm text-slate-700 whitespace-pre-line">{response}</div>
+            <ResponseText text={response} className="text-sm text-slate-700" />
           ) : (
             <div className="text-sm text-slate-500">
               Your personalized plan will appear here after you click "Get My Productivity Plan".

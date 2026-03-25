@@ -12,10 +12,25 @@ const User = require('./models/User');
 
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENROUTER_API_KEY;
+const AI_API_URL = process.env.AI_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
+const AI_MODEL = process.env.AI_MODEL || 'nvidia/nemotron-3-super-120b-a12b';
+
+function resolveModelForProvider(model, apiUrl) {
+  if (!model) return model;
+  const isNvidia = typeof apiUrl === 'string' && apiUrl.includes('integrate.api.nvidia.com');
+  if (!isNvidia) return model;
+
+  // NVIDIA often expects fully-qualified IDs like moonshotai/kimi-k2.5.
+  if (!model.includes('/') && /^kimi/i.test(model)) {
+    return `moonshotai/${model}`;
+  }
+
+  return model;
+}
 
 if (!MONGO_URI) throw new Error("MONGO_URI is required in env");
-if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is required in env");
+if (!AI_API_KEY) throw new Error("AI_API_KEY (or OPENROUTER_API_KEY) is required in env");
 
 initFirebaseAdmin();
 
@@ -55,15 +70,16 @@ async function authenticate(req, res, next){
 
 // system prompts
 function getSystemPromptForAssistant(type){
+  const styleGuide = 'Response style: Use plain, friendly text with short headings and bullet points. Avoid markdown tables, avoid pipe characters (|), and avoid decorative separators.';
   const map = {
-    anxiety: `You are "Dr. Sarah", an empathetic AI anxiety-relief counselor. Use CBT techniques, grounding, breathing exercises, safe comforting language. Always include a brief action step the user can try.`,
-    emotional: `You are an emotional analysis assistant. Help the user identify emotions, triggers, patterns and suggest reflective questions and coping strategies. Be concise and non-judgmental.`,
-    relationship: `You are Alex, a relationship advisor. Help with communication, boundaries, and conflict resolution. Provide practical scripts / phrases to use when talking to others.`,
-    productivity: `You are Maya, a productivity coach. Offer routines, Pomodoro, time-blocking, and habit building tailored to the user's context.`,
-    wellness: `You are Dr. Kim, wellness advisor. Offer general nutrition, sleep and exercise guidance. Not a medical diagnosis. Advise to consult professionals for medical conditions.`,
-    crisis: `You are a crisis-support assistant: provide immediate coping techniques, encourage contacting emergency services and list hotlines. Always give safety-first instructions and encourage contacting emergency services if in danger.`
+    anxiety: `You are "Dr. Sarah", an empathetic AI anxiety-relief counselor. Use CBT techniques, grounding, breathing exercises, safe comforting language. Always include a brief action step the user can try. ${styleGuide}`,
+    emotional: `You are an emotional analysis assistant. Help the user identify emotions, triggers, patterns and suggest reflective questions and coping strategies. Be concise and non-judgmental. ${styleGuide}`,
+    relationship: `You are Alex, a relationship advisor. Help with communication, boundaries, and conflict resolution. Provide practical scripts / phrases to use when talking to others. ${styleGuide}`,
+    productivity: `You are Maya, a productivity coach. Offer routines, Pomodoro, time-blocking, and habit building tailored to the user's context. ${styleGuide}`,
+    wellness: `You are Dr. Kim, wellness advisor. Offer general nutrition, sleep and exercise guidance. Not a medical diagnosis. Advise to consult professionals for medical conditions. ${styleGuide}`,
+    crisis: `You are a crisis-support assistant: provide immediate coping techniques, encourage contacting emergency services and list hotlines. Always give safety-first instructions and encourage contacting emergency services if in danger. ${styleGuide}`
   };
-  return map[type] || `You are a helpful mental wellbeing assistant.`;
+  return map[type] || `You are a helpful mental wellbeing assistant. ${styleGuide}`;
 }
 
 // chat route
@@ -97,32 +113,56 @@ app.post('/api/chat', authenticate, async (req, res) => {
       { role: 'system', content: systemPrompt },
       ...chat.messages.map(m => ({ role: m.role, content: m.text }))
     ];
+    const resolvedModel = resolveModelForProvider(AI_MODEL, AI_API_URL);
 
-    // call OpenRouter API
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    // call configured AI API
+    const requestHeaders = {
+      'Authorization': `Bearer ${AI_API_KEY}`,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    };
+
+    // OpenRouter-specific headers remain optional and only apply to that endpoint.
+    if (AI_API_URL.includes('openrouter.ai')) {
+      requestHeaders['HTTP-Referer'] = process.env.AI_HTTP_REFERER || 'http://localhost:5000';
+      requestHeaders['X-Title'] = process.env.AI_APP_TITLE || 'HarmoniqMind';
+    }
+
+    const requestBody = {
+      model: resolvedModel,
+      messages: messagesForAI,
+      stream: false,
+      max_tokens: 16384,
+      temperature: 1,
+      top_p: 0.95
+    };
+
+    if (AI_API_URL.includes('integrate.api.nvidia.com')) {
+      requestBody.extra_body = {
+        chat_template_kwargs: { enable_thinking: true },
+        reasoning_budget: 16384
+      };
+    }
+
+    const response = await fetch(AI_API_URL, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:5000',
-        'X-Title': 'HarmoniqMind'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-sonnet:free',
-        messages: messagesForAI,
-        max_tokens: 600,
-        temperature: 0.7
-      })
+      headers: requestHeaders,
+      body: JSON.stringify(requestBody)
     });
 
     if(!response.ok){
       const errText = await response.text();
-      console.error('OpenRouter API error', errText);
-      return res.status(500).json({error:'OpenRouter API error', detail: errText});
+      console.error('AI API error', errText);
+      return res.status(500).json({error:'AI API error', detail: errText});
     }
 
     const aiData = await response.json();
-    const assistantText = aiData.choices?.[0]?.message?.content?.trim() || "Sorry, I'm having trouble right now.";
+    const aiMessage = aiData.choices?.[0]?.message || {};
+    const contentText = typeof aiMessage.content === 'string' ? aiMessage.content.trim() : '';
+    const reasoningText = typeof aiMessage.reasoning_content === 'string'
+      ? aiMessage.reasoning_content.trim()
+      : (typeof aiMessage.reasoning === 'string' ? aiMessage.reasoning.trim() : '');
+    const assistantText = contentText || reasoningText || "Sorry, I'm having trouble right now.";
 
     chat.messages.push({ role: 'assistant', text: assistantText });
     await chat.save();
