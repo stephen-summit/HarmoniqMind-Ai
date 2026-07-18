@@ -17,7 +17,6 @@ Frontend: HTML, CSS, JavaScript / React
 Backend: Node.js, Express
 Database: MongoDB
 AI/NLP: Intelligent response system
-📸 Screenshots
 🔹 Home Page
 ![Home Page](https://raw.githubusercontent.com/stephen-summit/HarmoniqMind-Ai/main/home.png)
 🔹 Chat Interface
